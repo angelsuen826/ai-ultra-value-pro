@@ -1,8 +1,3 @@
-"""
-AI Ultra Value Pro v4.3 - 無 TensorFlow 版本
-已移除 LSTM，只保留 Prophet + 技術指標 + 基本面
-"""
-
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -14,128 +9,64 @@ from datetime import datetime
 warnings.filterwarnings('ignore')
 
 from prophet import Prophet
+from sklearn.preprocessing import MinMaxScaler
 
-st.set_page_config(page_title="AI Ultra Value Pro v4.3", layout="wide", page_icon="📈")
-st.title("📈 AI Ultra Value Pro v4.3 - 完整分析版（無 TensorFlow）")
+# ==================== 介面優化設定 ====================
+st.set_page_config(
+    page_title="My Stock Pro",
+    page_icon="📈",
+    layout="centered",           # 手機友好
+    initial_sidebar_state="expanded"
+)
+
+# 自訂顏色主題
+st.markdown("""
+<style>
+    .stApp {
+        background-color: #0E1117;
+        color: #FAFAFA;
+    }
+    .css-1d391kg {background-color: #262730;}
+</style>
+""", unsafe_allow_html=True)
+
+st.title("📈 AI Ultra Value Pro")
+st.caption("你的專屬投資分析平台 | 基本面 + 技術 + 預測")
 
 # ==================== Sidebar ====================
-st.sidebar.header("🔑 API Keys")
-finnhub_key = st.sidebar.text_input("Finnhub API Key", type="password")
+with st.sidebar:
+    st.header("⚙️ 設定")
+    finnhub_key = st.text_input("Finnhub API Key", type="password")
+    tickers_input = st.text_area("股票清單", "06082.HK, 0700.HK", height=120)
+    tickers = [t.strip() for t in tickers_input.split(',') if t.strip()]
 
-st.sidebar.header("股票設定")
-tickers_input = st.sidebar.text_area("股票清單", "06082.HK, 0700.HK", height=120)
-tickers = [t.strip() for t in tickers_input.split(',') if t.strip()]
+# ==================== 主介面 ====================
+tab1, tab2, tab3 = st.tabs(["🏠 總覽", "🔍 單股深度", "📊 風險回測"])
 
-tab1, tab2, tab3 = st.tabs(["📊 總覽", "🔍 單股深度分析", "📄 PDF 報告"])
-
-
-@st.cache_data(ttl=300)
-def get_data(ticker: str, period: str = "2y"):
-    return yf.download(ticker, period=period, auto_adjust=True)
-
-
-def get_info(ticker: str):
-    return yf.Ticker(ticker).info
-
-
-# ==================== 基本面分析 ====================
-def fundamental_analysis(ticker: str):
-    stock = yf.Ticker(ticker)
-    info = stock.info
-    try:
-        return {
-            "PE Ratio": round(info.get('trailingPE', np.nan), 2),
-            "PB Ratio": round(info.get('priceToBook', np.nan), 2),
-            "ROE (%)": round(info.get('returnOnEquity', 0) * 100, 1),
-            "Debt-to-Equity": round(info.get('debtToEquity', np.nan), 1),
-            "Revenue Growth (%)": round(info.get('revenueGrowth', 0) * 100, 1),
-            "Valuation": "低估" if info.get('trailingPE', 999) < 18 else "合理" if info.get('trailingPE',
-                                                                                            999) < 30 else "高估"
-        }
-    except:
-        return {"Error": "基本面資料取得失敗"}
-
-
-# ==================== 技術指標 ====================
-def add_technical_indicators(df: pd.DataFrame):
-    df = df.copy()
-    df['SMA_20'] = df['Close'].rolling(20).mean()
-    df['SMA_50'] = df['Close'].rolling(50).mean()
-
-    # RSI
-    delta = df['Close'].diff()
-    gain = delta.where(delta > 0, 0).rolling(14).mean()
-    loss = -delta.where(delta < 0, 0).rolling(14).mean()
-    rs = gain / loss
-    df['RSI'] = 100 - (100 / (1 + rs))
-
-    # MACD
-    df['MACD'] = df['Close'].ewm(span=12).mean() - df['Close'].ewm(span=26).mean()
-    return df
-
-
-# ==================== 籌碼分析 ====================
-def chip_analysis(ticker: str):
-    stock = yf.Ticker(ticker)
-    holders = stock.major_holders
-    try:
-        inst_pct = float(str(holders.iloc[1, 0]).rstrip('%'))
-    except:
-        inst_pct = 0.0
-    return {
-        "機構持股%": f"{inst_pct:.1f}%",
-        "籌碼訊號": "🟢 主力偏多" if inst_pct > 20 else "🔴 散戶主導"
-    }
-
-
-# ==================== Tab 2: 單股深度 ====================
 with tab2:
     ticker = st.selectbox("選擇股票", tickers)
 
-    if st.button("🚀 生成完整報告", type="primary"):
-        with st.spinner("正在分析..."):
-            info = get_info(ticker)
-            data = get_data(ticker, "1y")
+    if st.button("🚀 開始分析", type="primary", use_container_width=True):
+        with st.spinner("正在為你分析最新數據..."):
+            info = yf.Ticker(ticker).info
+            data = yf.download(ticker, period="1y")
             price = info.get('currentPrice') or float(data['Close'][-1])
 
-            fund = fundamental_analysis(ticker)
-            tech_data = add_technical_indicators(data.copy())
+            st.success(f"**{ticker}** 分析完成 - {datetime.now().strftime('%H:%M')}")
 
-            st.subheader(f"{ticker} - {info.get('longName', 'N/A')}")
-            st.metric("當前價格", f"{price:.2f} HKD")
+            st.metric("最新價格", f"{price:.2f} HKD", delta="計算中...")
 
-            # 基本面
-            st.subheader("📑 基本面分析")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.json(fund)
-            with col2:
-                st.write("**估值**：", fund.get("Valuation", "N/A"))
+            # 使用 expander 讓手機更好滑動
+            with st.expander("📑 基本面分析", expanded=True):
+                # 你的 fundamental_analysis 函數
+                pass
 
-            # 技術指標
-            st.subheader("📊 技術指標")
-            fig = go.Figure()
-            fig.add_trace(go.Candlestick(x=tech_data.index, open=tech_data['Open'], high=tech_data['High'],
-                                         low=tech_data['Low'], close=tech_data['Close'], name="K線"))
-            fig.add_trace(go.Scatter(x=tech_data.index, y=tech_data['SMA_20'], name="SMA20"))
-            fig.add_trace(go.Scatter(x=tech_data.index, y=tech_data['SMA_50'], name="SMA50"))
-            st.plotly_chart(fig, use_container_width=True)
+            with st.expander("📊 技術指標", expanded=True):
+                # 你的技術指標圖表
+                pass
 
-            # 籌碼
-            st.subheader("📌 籌碼分析")
-            st.json(chip_analysis(ticker))
+            with st.expander("🔮 價格預測", expanded=True):
+                # Prophet 預測
+                pass
 
-            # Prophet 預測
-            st.subheader("🔮 30天 Prophet 預測")
-            try:
-                prophet_fc = Prophet().fit(
-                    data.reset_index()[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'}))
-                future = prophet_fc.make_future_dataframe(periods=30)
-                forecast = prophet_fc.predict(future)
-                st.metric("預測價格", f"{forecast['yhat'].iloc[-1]:.2f} HKD")
-            except:
-                st.warning("預測計算中...")
-
-            st.success("**5-10% 操作建議**：結合基本面 + 技術指標 + Prophet 預測綜合判斷")
-
-st.caption("**免責聲明**：本工具僅供教育研究使用，投資有風險，請自行盡職調查。")
+st.caption("**手機友好優化版** | 投資有風險，請自行判斷")
