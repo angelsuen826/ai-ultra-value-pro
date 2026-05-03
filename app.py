@@ -30,7 +30,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📈 AI Ultra Value Pro")
+st.title("📈 My Stock Pro")
 st.caption("你的專屬投資分析平台 | 基本面 + 技術 + 預測")
 
 # ==================== Sidebar ====================
