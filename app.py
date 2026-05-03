@@ -71,13 +71,22 @@ def add_technical_indicators(df: pd.DataFrame):
 
 # ==================== 籌碼 ====================
 def chip_analysis(ticker: str):
+    """改進版籌碼分析"""
     stock = yf.Ticker(ticker)
     holders = stock.major_holders
     try:
-        inst_pct = float(str(holders.iloc[1, 0]).rstrip('%'))
+        if not holders.empty:
+            inst_pct = float(str(holders.iloc[1, 0]).rstrip('%'))
+        else:
+            inst_pct = 0.0
     except:
         inst_pct = 0.0
-    return {"機構持股%": f"{inst_pct:.1f}%", "訊號": "🟢 主力偏多" if inst_pct > 20 else "🔴 散戶主導"}
+
+    return {
+        "機構持股%": f"{inst_pct:.2f}%",
+        "籌碼訊號": "🟢 主力偏多" if inst_pct > 15 else "🔴 散戶主導",
+        "注意": "HK股機構持股數據有時不完整"
+    }
 
 
 # ==================== Tab 2 ====================
